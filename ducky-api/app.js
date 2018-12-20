@@ -127,7 +127,7 @@ function translateHTMLFile(path) {
 			parser.write(html);
 			parser.end();
 
-			const nonClosingTags = ['meta'];
+			const nonClosingTags = ['meta', 'link'];
 
 			translate(toTranslate)
 			.then(result => {
