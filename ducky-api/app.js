@@ -9,7 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const exec = require('child_process').exec;
 const rimraf = require('rimraf');
-const htmlParser = require('htmlParser2');
+const htmlParser = require('htmlparser2');
 
 const app = express();
 const upload = multer({ dest: 'uploads/' });
