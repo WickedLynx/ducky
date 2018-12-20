@@ -127,6 +127,8 @@ function translateHTMLFile(path) {
 			parser.write(html);
 			parser.end();
 
+			const nonClosingTags = ['meta'];
+
 			translate(toTranslate)
 			.then(result => {
 				if (result.length !== toTranslate.length) { reject('Translation failed'); return; }
@@ -150,7 +152,9 @@ function translateHTMLFile(path) {
 					},
 					onclosetag: (name, attribute) => {
 						ignoreNext = false;
-						translated = translated + `</${name}>`
+						if (!nonClosingTags.find( t => { return t === name.trim().toLowerCase() })) {
+							translated = translated + `</${name}>`
+						}
 					}
 				});
 				writer.write(html);
