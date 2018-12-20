@@ -127,17 +127,19 @@ function translateHTMLFile(path) {
 			parser.write(html);
 			parser.end();
 
-			const nonClosingTags = ['meta', 'link', 'input', 'img', 'noscript'];
+			const nonClosingTags = ['meta', 'link', 'input', 'img'];
+			console.log(toTranslate);
 
 			translate(toTranslate)
 			.then(result => {
+				console.log(result);
 				if (result.length !== toTranslate.length) { reject('Translation failed'); return; }
-				let translated = '';
+				let translated = '<!DOCTYPE html>\n';
 				let index = 0;
 
 				const writer = new htmlParser.Parser({
 					onopentag: (name, attributes) => {
-						translated = translated + `\n<${name} ${stringifyAttributes(attributes)}>`;
+						translated = translated + `\n<${name}${stringifyAttributes(attributes)}>`;
 						if (ignoredTags.find( t => { return t === name.trim().toLowerCase() })) {
 							ignoreNext = true;
 						}
@@ -162,6 +164,7 @@ function translateHTMLFile(path) {
 				resolve(translated);
 			})
 			.catch(err => {
+				console.log(err);
 				reject(err);
 			});
 		});
@@ -169,7 +172,7 @@ function translateHTMLFile(path) {
 }
 
 function stringifyAttributes(attributes) {
-	if (!attributes) { return ' '; }
+	if (!attributes) { return ''; }
 	let strung = '';
 	for (const name in attributes) {
 		if (attributes.hasOwnProperty(name)) {
@@ -201,6 +204,7 @@ function performOCR(fileName) {
 }
 
 function translate(texts) {
+	const actualTexts = texts.filter( l => { return l.trim().length > 0 });
 	return new Promise(function(resolve, reject) {
 		const watsonKey = config.watsonKey;
 		const watsonURL = config.watsonURL;
@@ -216,7 +220,7 @@ function translate(texts) {
 		var reqConfig = { auth: { username: 'apiKey', password:  watsonKey }};
 
 		axios.post(watsonURL, {
-			text: texts,
+			text: actualTexts,
 			'model-id': 'nl-en',
 			'source': 'nl',
 			'target': 'en'
@@ -226,9 +230,21 @@ function translate(texts) {
 				reject("Failed to translate");
 				return;
 			}
-			resolve(response.data.translations);
+			let result = [];
+			let responseIndex = 0;
+			for (let i = 0; i < texts.length; i++) {
+				const line = texts[i];
+				if (line.trim().length > 0) {
+					result.push(response.data.translations[responseIndex]);
+					responseIndex++;
+				} else {
+					result.push({ translation: line });
+				}
+			}
+			resolve(result);
 		})
 		.catch(error => {
+			console.log(error);
 			reject("Failed to translate");
 		});
 	});
