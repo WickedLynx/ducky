@@ -128,11 +128,9 @@ function translateHTMLFile(path) {
 			parser.end();
 
 			const nonClosingTags = ['meta', 'link', 'input', 'img'];
-			console.log(toTranslate);
 
 			translate(toTranslate)
 			.then(result => {
-				console.log(result);
 				if (result.length !== toTranslate.length) { reject('Translation failed'); return; }
 				let translated = '<!DOCTYPE html>\n';
 				let index = 0;
