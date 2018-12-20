@@ -43,9 +43,9 @@ app.use(authenticator);
 
 app.post('/translate/text', function(req, res) {
 	const text = req.body.text;
-	translateText(text)
+	translate([text])
 	.then( result => {
-		postSuccess(res, result);
+		postSuccess(res, { translation: result[0].translation });
 	})
 	.catch(error => {
 		postError(res, 500, error);
@@ -63,9 +63,9 @@ app.post('/translate/image', upload.single('image'), function(req, res) {
 		}
 		performOCR(targetPath)
 		.then( text => {
-			translateArray(text)
+			translate([text])
 			.then( result => {
-				postSuccess(res, result);
+				postSuccess(res, { translation: result[0].translation });
 			})
 			.catch( error => {
 				postError(res, 500, error);
@@ -127,7 +127,7 @@ function translateHTMLFile(path) {
 			parser.write(html);
 			parser.end();
 
-			translateArray(toTranslate)
+			translate(toTranslate)
 			.then(result => {
 				if (result.length !== toTranslate.length) { reject('Translation failed'); return; }
 				let translated = '';
@@ -196,41 +196,7 @@ function performOCR(fileName) {
 	});
 }
 
-function translateText(text) {
-	return new Promise(function(resolve, reject) {
-		const watsonKey = config.watsonKey;
-		const watsonURL = config.watsonURL;
-		if (!watsonKey || !watsonURL) {
-			reject('We cannot proceed at this moment');
-			return;
-		}
-		if (!text) {
-			reject('Nothing to translate');
-			return;
-		}
-
-		var reqConfig = { auth: { username: 'apiKey', password:  watsonKey }};
-
-		axios.post(watsonURL, {
-			text: [text],
-			'model-id': 'nl-en',
-			'source': 'nl',
-			'target': 'en'
-		}, reqConfig)
-		.then((response) => {
-			if (!response.data.translations || response.data.translations.length == 0) {
-				reject("Failed to translate");
-				return;
-			}
-			resolve(response.data.translations[0]);
-		})
-		.catch(error => {
-			reject("Failed to translate");
-		});
-	});
-}
-
-function translateArray(texts) {
+function translate(texts) {
 	return new Promise(function(resolve, reject) {
 		const watsonKey = config.watsonKey;
 		const watsonURL = config.watsonURL;
