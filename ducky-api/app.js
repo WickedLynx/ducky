@@ -103,7 +103,11 @@ app.post('/translate/html', upload.single('html'), function(req, res) {
 function translateHTMLFile(path) {
 	return new Promise((resolve, reject) => {
 		fs.readFile(path, { encoding: 'utf8' }, (err, html) => {
-			if (err) { reject('Cannot read file'); return; }
+			if (err) { 
+				rimraf(path, err => { console.log(err) });
+				reject('Cannot read file');
+				return;
+			}
 
 			const ignoredTags = ['script', 'head', 'style', 'noscript', 'meta', 'html'];
 			let ignoreNext = false;
@@ -159,10 +163,12 @@ function translateHTMLFile(path) {
 				});
 				writer.write(html);
 				writer.end();
+				rimraf(path, err => { console.log(err) });
 				resolve(translated);
 			})
 			.catch(err => {
 				console.log(err);
+				rimraf(path, err => { console.log(err) });
 				reject(err);
 			});
 		});
@@ -215,7 +221,7 @@ function translate(texts) {
 			return;
 		}
 
-		var reqConfig = { auth: { username: 'apiKey', password:  watsonKey }};
+		const reqConfig = { auth: { username: 'apiKey', password:  watsonKey }};
 
 		axios.post(watsonURL, {
 			text: actualTexts,
