@@ -34,7 +34,7 @@ const authenticator = function(req, res, next) {
 
 app.use(cors());
 app.use(bodyParser.json({ limit: '10mb'}));
-app.use(bodyParser.urlencoded({ extended: true }));
+app.use(bodyParser.urlencoded({ extended: true, limit: '10mb' }));
 app.use(authenticator);
 
 /**
@@ -96,9 +96,89 @@ app.post('/translate/html', upload.single('html'), function(req, res) {
 	});
 });
 
+app.post('/translate/xtz', function(req, res) {
+	const html = req.body.html;
+	if (!html) {
+		postError(402, 'No html');
+		return;
+	}
+	translateHTMLString(html)
+	.then(result => {
+		postSuccess(res, { html: result });
+	})
+	.catch(err => {
+		postError(res, 500, 'Could not translate');
+	});
+});
+
 /**
  * Helpers
  */
+
+function translateHTMLString(html) {
+	return new Promise((resolve, reject) => {
+		const ignoredTags = ['script', 'head', 'style', 'noscript', 'meta', 'html'];
+		let ignoreNext = false;
+		let toTranslate = [];
+
+		const parser = new htmlParser.Parser({
+			onopentag: (name, attribute) => {
+				if (ignoredTags.find( t => { return t === name.trim().toLowerCase() })) {
+					ignoreNext = true;
+				}
+			},
+			ontext: (text) => {
+				if(!ignoreNext) {
+					toTranslate.push(text);
+				}
+			},
+			onclosetag: (name, attribute) => {
+				ignoreNext = false;
+			}
+		});
+		parser.write(html);
+		parser.end();
+
+		const nonClosingTags = ['meta', 'link', 'input', 'img'];
+
+		translate(toTranslate)
+		.then(result => {
+			if (result.length !== toTranslate.length) { reject('Translation failed'); return; }
+			let translated = '<!DOCTYPE html>\n';
+			let index = 0;
+
+			const writer = new htmlParser.Parser({
+				onopentag: (name, attributes) => {
+					translated = translated + `\n<${name}${stringifyAttributes(attributes)}>`;
+					if (ignoredTags.find( t => { return t === name.trim().toLowerCase() })) {
+						ignoreNext = true;
+					}
+				},
+				ontext: (text) => {
+					if(ignoreNext) {
+						translated = translated + text;
+					} else {
+						translated = translated + result[index].translation;
+						index++;
+					}
+				},
+				onclosetag: (name, attribute) => {
+					ignoreNext = false;
+					if (!nonClosingTags.find( t => { return t === name.trim().toLowerCase() })) {
+						translated = translated + `</${name}>`
+					}
+				}
+			});
+			writer.write(html);
+			writer.end();
+			resolve(translated);
+		})
+		.catch(err => {
+			console.log(err);
+			reject(err);
+		});
+	});
+}
 
 function translateHTMLFile(path) {
 	return new Promise((resolve, reject) => {
@@ -108,68 +188,15 @@ function translateHTMLFile(path) {
 				reject('Cannot read file');
 				return;
 			}
-
-			const ignoredTags = ['script', 'head', 'style', 'noscript', 'meta', 'html'];
-			let ignoreNext = false;
-			let toTranslate = [];
-
-			const parser = new htmlParser.Parser({
-				onopentag: (name, attribute) => {
-					if (ignoredTags.find( t => { return t === name.trim().toLowerCase() })) {
-						ignoreNext = true;
-					}
-				},
-				ontext: (text) => {
-					if(!ignoreNext) {
-						toTranslate.push(text);
-					}
-				},
-				onclosetag: (name, attribute) => {
-					ignoreNext = false;
-				}
-			});
-			parser.write(html);
-			parser.end();
-
-			const nonClosingTags = ['meta', 'link', 'input', 'img'];
-
-			translate(toTranslate)
-			.then(result => {
-				if (result.length !== toTranslate.length) { reject('Translation failed'); return; }
-				let translated = '<!DOCTYPE html>\n';
-				let index = 0;
-
-				const writer = new htmlParser.Parser({
-					onopentag: (name, attributes) => {
-						translated = translated + `\n<${name}${stringifyAttributes(attributes)}>`;
-						if (ignoredTags.find( t => { return t === name.trim().toLowerCase() })) {
-							ignoreNext = true;
-						}
-					},
-					ontext: (text) => {
-						if(ignoreNext) {
-							translated = translated + text;
-						} else {
-							translated = translated + result[index].translation;
-							index++;
-						}
-					},
-					onclosetag: (name, attribute) => {
-						ignoreNext = false;
-						if (!nonClosingTags.find( t => { return t === name.trim().toLowerCase() })) {
-							translated = translated + `</${name}>`
-						}
-					}
-				});
-				writer.write(html);
-				writer.end();
+			translateHTMLString(html)
+			.then((t) => { 
 				rimraf(path, err => { console.log(err) });
-				resolve(translated);
+				resolve(t);
 			})
-			.catch(err => {
-				console.log(err);
+			.catch((e) => {
+				console.log(e);
 				rimraf(path, err => { console.log(err) });
-				reject(err);
+				reject(e);
 			});
 		});
 	});
@@ -210,14 +237,14 @@ function performOCR(fileName) {
 function translate(texts) {
 	const actualTexts = texts.filter( l => { return l.trim().length > 0 });
 	return new Promise(function(resolve, reject) {
+		if (actualTexts.length === 0) {
+			resolve(texts);
+			return;
+		}
 		const watsonKey = config.watsonKey;
 		const watsonURL = config.watsonURL;
 		if (!watsonKey || !watsonURL) {
 			reject('We cannot proceed at this moment');
-			return;
-		}
-		if (!texts) {
-			reject('Nothing to translate');
 			return;
 		}
 
